@@ -10,4 +10,8 @@ Student ID: 1297447
    and security verification of the server, only a small number of users may be 
    allowed to call it to ensure the security of server data.
 
-2. 
+2. Most general authentication should be directly placed in the RPC framework, 
+   which can efficiently ensure that every connection is authenticated and 
+   secure. For real-world scenarios, there may be some special validation 
+   scenarios (such as secondary validation), and these individual validation 
+   methods need to be placed in their functions.
