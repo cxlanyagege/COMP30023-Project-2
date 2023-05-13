@@ -1,0 +1,13 @@
+Name: He Shen
+Login ID: heshen
+Student ID: 1297447
+
+3.2 Planning task
+
+1. For the scenario of this project service only, I believe that the server can 
+   accept calls from everyone because all calls are limited and known. But from 
+   a real-world perspective, considering the different operational requirements 
+   and security verification of the server, only a small number of users may be 
+   allowed to call it to ensure the security of server data.
+
+2. 
