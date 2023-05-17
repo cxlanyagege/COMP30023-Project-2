@@ -1,4 +1,5 @@
 #define _POSIX_C_SOURCE 200112L
+
 #include <netdb.h>
 #include <string.h>
 #include <stdio.h>
@@ -6,13 +7,15 @@
 #include <unistd.h>
 #include "rpc.h"
 
-
 struct rpc_server {
     /* Add variable(s) for server state */
     int port;                           // Server port
     int socket_fd;                      // Server socket
     int socket_opt;                     // Socket option
-    struct addrinfo hint, *res, *rp;    // Address infomation
+    int handler_size;                   // Handler numbers
+    char **handler_name;                // Handler names array
+    rpc_handler *handler;               // Handler function array
+    struct addrinfo hint, *res, *rp;    // Address storing infomation
 };
 
 rpc_server *rpc_init_server(int port) {
@@ -46,6 +49,11 @@ rpc_server *rpc_init_server(int port) {
     setsockopt(server->socket_fd, SOL_SOCKET, SO_REUSEADDR, 
               &server->socket_opt, sizeof(server->socket_opt));
 
+    /* Initialize RPC handler */
+    server->handler_size = 0;
+    server->handler_name = NULL;
+    server->handler = NULL;
+
     return server;
 }
 
@@ -55,7 +63,27 @@ int rpc_register(rpc_server *srv, char *name, rpc_handler handler) {
         return -1;
     }
 
-    return 0;
+    /* Check if there are functions with same name */
+    for (int i = 0; i < srv->handler_size; i++) {
+        if (!strcmp(srv->handler_name[i], name)) {
+            srv->handler[i] = handler;
+            return i;
+        }
+    }
+
+    /* Allocate memory to store new handler function */
+    srv->handler_size++;
+    srv->handler_name = realloc(srv->handler_name, 
+                                srv->handler_size * sizeof(char *));
+    srv->handler = realloc(srv->handler, 
+                           srv->handler_size * sizeof(rpc_handler));
+    
+    /* Store new handler function */
+    int index = srv->handler_size - 1;
+    srv->handler_name[index] = strdup(name);
+    srv->handler[index] = handler;
+
+    return index;
 }
 
 void rpc_serve_all(rpc_server *srv) {
