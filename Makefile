@@ -6,7 +6,7 @@ EXECUTABLES=rpc-server rpc-client
 
 .PHONY: format all
 
-all: $(EXECUTABLES)
+all: $(RPC_SYSTEM)
 
 $(RPC_SYSTEM): rpc.c rpc.h
 	$(CC) -Wall -c -o $@ $<
@@ -16,6 +16,8 @@ rpc-server: $(SERVER) $(RPC_SYSTEM)
 
 rpc-client: $(CLIENT) $(RPC_SYSTEM)
 	$(CC) -o $@ $^
+
+rpc-test: $(EXECUTABLES)
 
 format:
 	clang-format -style=file -i *.c *.h
