@@ -87,12 +87,18 @@ int rpc_register(rpc_server *srv, char *name, rpc_handler handler) {
 }
 
 void rpc_serve_all(rpc_server *srv) {
-
+    
 }
 
 
 struct rpc_client {
     /* Add variable(s) for client state */
+    int port;                           // Server port
+    int socket_fd;                      // Server socket
+    int handler_size;                   // Handler numbers
+    char **handler_name;                // Handler names array
+    rpc_handler *handler;               // Handler function array
+    struct addrinfo hint, *res, *rp;    // Address storing infomation
 };
 
 struct rpc_handle {
@@ -100,7 +106,28 @@ struct rpc_handle {
 };
 
 rpc_client *rpc_init_client(char *addr, int port) {
-    return NULL;
+    /* Allocate memory to client */
+    rpc_client *client = malloc(sizeof(rpc_client));
+
+    /* Check if client port is valid */
+    if (port <= 0) {
+        return NULL;
+    } else {
+        client->port = port;
+    }
+
+    /* Get address informations */
+    client->socket_fd = 0;
+    memset(&client->hint, 0, sizeof(client->hint));
+    client->hint.ai_family = AF_INET;
+    client->hint.ai_socktype = SOCK_STREAM;
+
+    /* Create socket for server */
+    char port_buffer[11];
+    sprintf(port_buffer, "%d", port);
+    getaddrinfo(addr, port_buffer, &client->hint, &client->res);
+
+    return client;
 }
 
 rpc_handle *rpc_find(rpc_client *cl, char *name) {

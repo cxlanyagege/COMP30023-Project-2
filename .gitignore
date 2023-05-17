@@ -1,3 +1,4 @@
+cases/
 server.a
 client.a
 rpc.o

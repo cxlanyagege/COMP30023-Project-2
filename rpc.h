@@ -6,7 +6,6 @@
 
 #include <stddef.h>
 
-
 /* Server state */
 typedef struct rpc_server rpc_server;
 /* Client state */
