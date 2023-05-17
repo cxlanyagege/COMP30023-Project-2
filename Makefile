@@ -1,19 +1,24 @@
 CC=cc
 RPC_SYSTEM=rpc.o
+SERVER=server.a
+CLIENT=client.a
+EXECUTABLES=rpc-server rpc-client
 
 .PHONY: format all
 
-all: $(RPC_SYSTEM)
+all: $(EXECUTABLES)
 
 $(RPC_SYSTEM): rpc.c rpc.h
-	$(CC) -c -o $@ $<
+	$(CC) -Wall -c -o $@ $<
 
-# RPC_SYSTEM_A=rpc.a
-# $(RPC_SYSTEM_A): rpc.o
-# 	ar rcs $(RPC_SYSTEM_A) $(RPC_SYSTEM)
+rpc-server: $(SERVER) $(RPC_SYSTEM)
+	$(CC) -o $@ $^
+
+rpc-client: $(CLIENT) $(RPC_SYSTEM)
+	$(CC) -o $@ $^
 
 format:
 	clang-format -style=file -i *.c *.h
 
 clean:
-	rm -f $(RPC_SYSTEM)
+	rm -f $(RPC_SYSTEM) $(EXECUTABLES)
