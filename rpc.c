@@ -87,7 +87,31 @@ int rpc_register(rpc_server *srv, char *name, rpc_handler handler) {
 }
 
 void rpc_serve_all(rpc_server *srv) {
-    
+    /* Bind socket to listen client */
+    bind(srv->socket_fd, srv->res->ai_addr, srv->res->ai_addrlen);
+    listen(srv->socket_fd, 10);
+    int is_working = 1;
+
+    /* Wait until query coming in */
+    while (is_working) {
+        struct sockaddr_storage client_addr;
+        socklen_t client_addr_size = sizeof(client_addr);
+        int conn_fd = accept(srv->socket_fd, 
+                            (struct sockaddr*)&client_addr, 
+                             &client_addr_size);
+
+        /* No query, continue waiting */
+        if (conn_fd < 0) {
+            continue;
+        }
+
+        /* Send result back to client */
+        char send_buff[1024];
+        snprintf(send_buff, sizeof(send_buff), "");
+        write(conn_fd, send_buff, strlen(send_buff)); 
+        close(conn_fd);
+        is_working = 0;
+    }
 }
 
 
@@ -126,6 +150,9 @@ rpc_client *rpc_init_client(char *addr, int port) {
     char port_buffer[11];
     sprintf(port_buffer, "%d", port);
     getaddrinfo(addr, port_buffer, &client->hint, &client->res);
+    client->socket_fd = socket(client->res->ai_family, 
+                               client->res->ai_socktype, 
+                               client->res->ai_protocol);
 
     return client;
 }
