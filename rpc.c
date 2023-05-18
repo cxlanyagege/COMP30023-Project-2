@@ -146,13 +146,29 @@ rpc_client *rpc_init_client(char *addr, int port) {
     client->hint.ai_family = AF_INET;
     client->hint.ai_socktype = SOCK_STREAM;
 
-    /* Create socket for server */
+    /* Create socket for client */
     char port_buffer[11];
     sprintf(port_buffer, "%d", port);
     getaddrinfo(addr, port_buffer, &client->hint, &client->res);
-    client->socket_fd = socket(client->res->ai_family, 
-                               client->res->ai_socktype, 
-                               client->res->ai_protocol);
+
+    /* Wait until there is data */
+    for (client->rp = client->res; 
+         client->rp != NULL; 
+         client->rp = client->rp->ai_next) {
+            client->socket_fd = socket(client->rp->ai_family, 
+                                       client->rp->ai_socktype, 
+                                       client->rp->ai_protocol);
+
+            /* Socket is blocking, continue waiting */
+            if (client->socket_fd == -1) {
+                continue;
+            }
+            if (connect(client->socket_fd, 
+                        client->rp->ai_addr, 
+                        client->rp->ai_addrlen) != -1) {
+                            break;
+            }
+    }
 
     return client;
 }
