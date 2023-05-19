@@ -1,10 +1,13 @@
 #define _POSIX_C_SOURCE 200112L
+#define RPC_FIND 1
+#define RPC_CALL 2
 
 #include <netdb.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <errno.h>
 #include "rpc.h"
 
 struct rpc_server {
@@ -17,6 +20,9 @@ struct rpc_server {
     rpc_handler *handler;               // Handler function array
     struct addrinfo hint, *res, *rp;    // Address storing infomation
 };
+
+char *rpc_data_compose(int type, rpc_data *data);
+rpc_data *rpc_data_decompose(char *data);
 
 rpc_server *rpc_init_server(int port) {
     /* Allocate memory to server */
@@ -33,17 +39,23 @@ rpc_server *rpc_init_server(int port) {
     server->socket_fd = 0;
     server->socket_opt = 1;
     memset(&server->hint, 0, sizeof(server->hint));
-    server->hint.ai_family = AF_INET;
+    server->hint.ai_family = AF_INET6;
     server->hint.ai_socktype = SOCK_STREAM;
     server->hint.ai_flags = AI_PASSIVE;
 
     /* Create socket for server */
-    char port_buffer[11];
-    sprintf(port_buffer, "%d", port);
-    getaddrinfo(NULL, port_buffer, &server->hint, &server->res);
+    char port_buff[11];
+    sprintf(port_buff, "%d", port);
+    int ret = getaddrinfo(NULL, 
+                          port_buff, 
+                          &server->hint, 
+                          &server->res);
+    if (ret != 0) {
+        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(ret));
+    }
     server->socket_fd = socket(server->res->ai_family, 
                                server->res->ai_socktype, 
-                               server->res->ai_flags);
+                               server->res->ai_protocol);
 
     /* Set socket options */
     setsockopt(server->socket_fd, SOL_SOCKET, SO_REUSEADDR, 
@@ -88,21 +100,35 @@ int rpc_register(rpc_server *srv, char *name, rpc_handler handler) {
 
 void rpc_serve_all(rpc_server *srv) {
     /* Bind socket to listen client */
-    bind(srv->socket_fd, srv->res->ai_addr, srv->res->ai_addrlen);
+    if (bind(srv->socket_fd, 
+             srv->res->ai_addr, 
+             srv->res->ai_addrlen)) {
+                printf("Bind failed: %s\n", strerror(errno));
+    }
     listen(srv->socket_fd, 10);
-    int is_working = 1;
 
     /* Wait until query coming in */
-    while (is_working) {
+    while (1) {
         struct sockaddr_storage client_addr;
         socklen_t client_addr_size = sizeof(client_addr);
         int conn_fd = accept(srv->socket_fd, 
                             (struct sockaddr*)&client_addr, 
-                             &client_addr_size);
+                            &client_addr_size);
 
-        /* No query, continue waiting */
+        /* Error query, continue waiting */
         if (conn_fd < 0) {
             continue;
+        }
+
+        /* Read request from client */
+        char recv_buff[1024];
+        int byte_len = read(conn_fd, recv_buff, sizeof(recv_buff));
+
+        /* Determine specific RPC call feature */
+        if (recv_buff[0] == RPC_FIND) {
+            printf("Try to find\n");
+        } else if (recv_buff[0] == RPC_CALL) {
+
         }
 
         /* Send result back to client */
@@ -110,7 +136,6 @@ void rpc_serve_all(rpc_server *srv) {
         snprintf(send_buff, sizeof(send_buff), "");
         write(conn_fd, send_buff, strlen(send_buff)); 
         close(conn_fd);
-        is_working = 0;
     }
 }
 
@@ -143,7 +168,7 @@ rpc_client *rpc_init_client(char *addr, int port) {
     /* Get address informations */
     client->socket_fd = 0;
     memset(&client->hint, 0, sizeof(client->hint));
-    client->hint.ai_family = AF_INET;
+    client->hint.ai_family = AF_INET6;
     client->hint.ai_socktype = SOCK_STREAM;
 
     /* Create socket for client */
@@ -168,13 +193,40 @@ rpc_client *rpc_init_client(char *addr, int port) {
                         client->rp->ai_addrlen) != -1) {
                             break;
             }
+            close(client->socket_fd);
     }
 
     return client;
 }
 
 rpc_handle *rpc_find(rpc_client *cl, char *name) {
-    return NULL;
+    /* Check if arguments are valid */
+    if (cl == NULL || name == NULL) {
+        return NULL;
+    }
+
+    /* Send compose name data to server */
+    int comp_len = strlen(name) + 2;
+    char *comp_name = malloc(comp_len);
+    comp_name[0] = RPC_FIND;
+    strcpy(comp_name + 1, name);
+    write(cl->socket_fd, comp_name, strlen(name));
+
+    /* Read result sending from server */
+    char recv_buff[1024];
+    while (read(cl->socket_fd, recv_buff, 
+                sizeof(recv_buff) - 1) > 0) {
+
+    }
+
+    /* Check if result is valid */
+    if (recv_buff[0] == 0) {
+        return NULL;
+    }
+
+    /* Return handle for further reference */
+    rpc_handle *handle = malloc(sizeof(rpc_handle));
+    return handle;
 }
 
 rpc_data *rpc_call(rpc_client *cl, rpc_handle *h, rpc_data *payload) {
@@ -193,4 +245,12 @@ void rpc_data_free(rpc_data *data) {
         free(data->data2);
     }
     free(data);
+}
+
+char *rpc_data_compose(int type, rpc_data *data) {
+    
+}
+
+rpc_data *rpc_data_decompose(char *data) {
+
 }
