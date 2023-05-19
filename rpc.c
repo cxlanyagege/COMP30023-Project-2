@@ -122,23 +122,61 @@ void rpc_serve_all(rpc_server *srv) {
 
         /* Read request from client */
         char recv_buff[1024];
-        int byte_len = read(conn_fd, recv_buff, sizeof(recv_buff));
+        int byte_len = read(conn_fd, 
+                            recv_buff, 
+                            sizeof(recv_buff) - 1);
 
-        /* Determine specific RPC call feature */
-        if (recv_buff[0] == RPC_FIND) {
-            printf("Try to find\n");
-        } else if (recv_buff[0] == RPC_CALL) {
-
+        /* Check if reading is completed */
+        if (byte_len < 0) {
+            close(conn_fd);
+            continue;
         }
 
-        /* Send result back to client */
-        char send_buff[1024];
-        snprintf(send_buff, sizeof(send_buff), "");
-        write(conn_fd, send_buff, strlen(send_buff)); 
-        close(conn_fd);
+        /* Determine specific RPC call feature */
+        /* When client asks for finding function */
+        if (recv_buff[0] == RPC_FIND) {
+
+            /* Traverse every function names */
+            int i;
+            for (i = 0; i < srv->handler_size; i++) {
+
+                /* Do char by char comparison */
+                int j;
+                for (j = 1; j < byte_len; j++) {
+
+                    /* Mismatch detected, compare next one */
+                    if (srv->handler_name[i][j - 1] != recv_buff[j]) {
+                        break;
+                    }
+                }
+
+                /* No matched handler function */
+                if (j == byte_len) {
+                    char send_buff[1024];
+                    send_buff[0] = RPC_FIND;
+                    send_buff[1] = 1;
+                    write(conn_fd, send_buff, strlen(send_buff)); 
+                    close(conn_fd);
+                    break;
+                }
+            }
+
+            /* Matched result, reform client */
+            if (i == srv->handler_size) {
+                char send_buff[1024];
+                send_buff[0] = RPC_FIND;
+                send_buff[1] = 0;
+                write(conn_fd, send_buff, strlen(send_buff)); 
+                close(conn_fd);
+            }
+        } 
+        
+        /* When client asks to run function */
+        else if (recv_buff[0] == RPC_CALL) {
+
+        }
     }
 }
-
 
 struct rpc_client {
     /* Add variable(s) for client state */
@@ -171,30 +209,10 @@ rpc_client *rpc_init_client(char *addr, int port) {
     client->hint.ai_family = AF_INET6;
     client->hint.ai_socktype = SOCK_STREAM;
 
-    /* Create socket for client */
+    /* Specify address and port */
     char port_buffer[11];
     sprintf(port_buffer, "%d", port);
     getaddrinfo(addr, port_buffer, &client->hint, &client->res);
-
-    /* Wait until there is data */
-    for (client->rp = client->res; 
-         client->rp != NULL; 
-         client->rp = client->rp->ai_next) {
-            client->socket_fd = socket(client->rp->ai_family, 
-                                       client->rp->ai_socktype, 
-                                       client->rp->ai_protocol);
-
-            /* Socket is blocking, continue waiting */
-            if (client->socket_fd == -1) {
-                continue;
-            }
-            if (connect(client->socket_fd, 
-                        client->rp->ai_addr, 
-                        client->rp->ai_addrlen) != -1) {
-                            break;
-            }
-            close(client->socket_fd);
-    }
 
     return client;
 }
@@ -205,12 +223,30 @@ rpc_handle *rpc_find(rpc_client *cl, char *name) {
         return NULL;
     }
 
+    /* Create socket for client connection */
+    for (cl->rp = cl->res; 
+         cl->rp != NULL; 
+         cl->rp = cl->rp->ai_next) {
+            cl->socket_fd = socket(cl->rp->ai_family, 
+                                   cl->rp->ai_socktype, 
+                                   cl->rp->ai_protocol);
+            if (cl->socket_fd == -1) {
+                continue;
+            }
+            if (connect(cl->socket_fd, 
+                        cl->rp->ai_addr, 
+                        cl->rp->ai_addrlen) != -1) {
+                            break;
+            }
+            close(cl->socket_fd);
+    }
+
     /* Send compose name data to server */
     int comp_len = strlen(name) + 2;
     char *comp_name = malloc(comp_len);
     comp_name[0] = RPC_FIND;
     strcpy(comp_name + 1, name);
-    write(cl->socket_fd, comp_name, strlen(name));
+    write(cl->socket_fd, comp_name, strlen(comp_name));
 
     /* Read result sending from server */
     char recv_buff[1024];
@@ -222,7 +258,13 @@ rpc_handle *rpc_find(rpc_client *cl, char *name) {
     /* Check if result is valid */
     if (recv_buff[0] == 0) {
         return NULL;
+    } else if (recv_buff[0] == RPC_FIND) {
+        if (recv_buff[1] == 0) {
+            return NULL;
+        }
     }
+
+    close(cl->socket_fd);
 
     /* Return handle for further reference */
     rpc_handle *handle = malloc(sizeof(rpc_handle));
