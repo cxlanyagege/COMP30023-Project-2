@@ -331,6 +331,11 @@ rpc_data *rpc_call(rpc_client *cl, rpc_handle *h, rpc_data *payload) {
     int data_buff_size;
     char *handle_buff = rpc_handle_compose(RPC_CALL, h);
     char *data_buff = rpc_data_compose(RPC_CALL, &data_buff_size, payload);
+
+    if (!data_buff) {
+        return NULL;
+    }
+
     char *send_buff = malloc(h->handle_size + data_buff_size);
     memcpy(send_buff, handle_buff, h->handle_size);
     memcpy(send_buff + h->handle_size, data_buff, data_buff_size);
@@ -359,6 +364,11 @@ void rpc_data_free(rpc_data *data) {
 }
 
 char *rpc_data_compose(int type, int *size, rpc_data *data) {
+    /* Check if values inside rpc_data are valid */
+    if (data->data2_len == 0 || data->data2 == NULL) {
+        return NULL;
+    }
+
     /* Apply data compose by different query type */
     if (type == RPC_CALL) {
         /* Record total size of each part */
