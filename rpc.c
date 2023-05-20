@@ -21,8 +21,17 @@ struct rpc_server {
     struct addrinfo hint, *res, *rp;    // Address storing infomation
 };
 
-char *rpc_data_compose(int type, rpc_data *data);
+struct rpc_handle {
+    /* Add variable(s) for handle */
+    size_t name_len;
+    char *name;
+    int handle_size;
+};
+
+char *rpc_data_compose(int type, rpc_data *data, char *extra);
 rpc_data *rpc_data_decompose(char *data);
+char *rpc_handle_compose(int type, rpc_handle *handle);
+rpc_handle *rpc_handle_decompose(char *handle);
 
 rpc_server *rpc_init_server(int port) {
     /* Allocate memory to server */
@@ -171,9 +180,14 @@ void rpc_serve_all(rpc_server *srv) {
             }
         } 
         
-        /* When client asks to run function */
+        /* When client asks to call function */
         else if (recv_buff[0] == RPC_CALL) {
+            rpc_handle *handle = rpc_handle_decompose(recv_buff);
+        }
 
+        /* Clear transfered data once finished */
+        for (int i = 0; i < 1024; i++) {
+            recv_buff[i] = 0;
         }
     }
 }
@@ -186,10 +200,6 @@ struct rpc_client {
     char **handler_name;                // Handler names array
     rpc_handler *handler;               // Handler function array
     struct addrinfo hint, *res, *rp;    // Address storing infomation
-};
-
-struct rpc_handle {
-    /* Add variable(s) for handle */
 };
 
 rpc_client *rpc_init_client(char *addr, int port) {
@@ -268,10 +278,43 @@ rpc_handle *rpc_find(rpc_client *cl, char *name) {
 
     /* Return handle for further reference */
     rpc_handle *handle = malloc(sizeof(rpc_handle));
+    handle->name_len = strlen(name);
+    handle->name = name;
+    
     return handle;
 }
 
 rpc_data *rpc_call(rpc_client *cl, rpc_handle *h, rpc_data *payload) {
+    /* Check if arguments are valid */
+    if (cl == NULL || h == NULL || payload == NULL) {
+        return NULL;
+    }
+
+    /* Create socket for client connection */
+    for (cl->rp = cl->res; 
+         cl->rp != NULL; 
+         cl->rp = cl->rp->ai_next) {
+            cl->socket_fd = socket(cl->rp->ai_family, 
+                                   cl->rp->ai_socktype, 
+                                   cl->rp->ai_protocol);
+            if (cl->socket_fd == -1) {
+                continue;
+            }
+            if (connect(cl->socket_fd, 
+                        cl->rp->ai_addr, 
+                        cl->rp->ai_addrlen) != -1) {
+                            break;
+            }
+            close(cl->socket_fd);
+    }
+
+    /* Generate composed rpc handle and data */
+    char *call_buff = rpc_handle_compose(RPC_CALL, h);
+    //call_buff = rpc_data_compose(RPC_CALL, payload, call_buff);
+
+    /* Send compose buffer to server */
+    write(cl->socket_fd, call_buff, h->handle_size);
+
     return NULL;
 }
 
@@ -289,10 +332,104 @@ void rpc_data_free(rpc_data *data) {
     free(data);
 }
 
-char *rpc_data_compose(int type, rpc_data *data) {
-    
+char *rpc_data_compose(int type, rpc_data *data, char *extra) {
+    /* Apply data compose by different query type */
+    if (type == RPC_CALL) {
+        /* Record total size of each part */
+        int extra_len = strlen(extra);
+        int size = extra_len + 
+                   sizeof(int) + sizeof(size_t) + data->data2_len;
+        char *comp_data = malloc(size);
+
+        /* extra (handle) in rpc_handle */
+        memcpy(comp_data, extra, extra_len);
+        
+        /* data1 in rpc_data */
+        memcpy(comp_data + extra_len, 
+             &(data->data1), sizeof(int));
+
+        /* data2_len in rpc_data */
+        memcpy(comp_data + extra_len + sizeof(int), 
+             &(data->data2_len), sizeof(size_t));
+
+        /* data2 in rpc_data */
+        memcpy(comp_data + extra_len + sizeof(int) + sizeof(size_t), 
+               data->data2, data->data2_len);
+
+        return comp_data;
+    }
+
+    /* Unsupported call type, composed failed */
+    return NULL;
 }
 
 rpc_data *rpc_data_decompose(char *data) {
+    /* Apply data decompose by first index of data */
+    if (data[0] == RPC_CALL) {
+        rpc_data *data = malloc(sizeof(rpc_data));
+    }
 
+    /* Unsupported call type, decomposed failed */
+    return NULL;
+}
+
+char *rpc_handle_compose(int type, rpc_handle *handle) {
+    /* Apply data compose by different query type */
+    if (type == RPC_CALL) {
+        /* Record total size of each part */
+        char call_type = RPC_CALL;
+        int size = sizeof(char) + 
+                   sizeof(size_t) + 
+                   handle->name_len * sizeof(char) + 
+                   sizeof(int);
+        char *comp_handle = malloc(size * sizeof(char));
+        
+        /* RPC_CALL indicator */
+        memcpy(comp_handle, 
+               &call_type, sizeof(char));
+
+        /* Handler function name length */
+        memcpy(comp_handle + sizeof(char), 
+               &(handle->name_len), sizeof(size_t));
+
+        /* Handler function name */
+        memcpy(comp_handle + sizeof(char) + 
+               sizeof(size_t), 
+               handle->name, handle->name_len * sizeof(char));
+
+        /* Handle size */
+        handle->handle_size = size;
+        memcpy(comp_handle + sizeof(char) + 
+               sizeof(size_t) + handle->name_len * sizeof(char), 
+             &(handle->handle_size), sizeof(int));
+
+        return comp_handle;
+    }
+
+    /* Unsupported call type, composed failed */
+    return NULL;
+}
+
+rpc_handle *rpc_handle_decompose(char *comp_handle) {
+    rpc_handle *handle = malloc(sizeof(rpc_handle));
+
+    /* Handler function name length */
+    memcpy(&(handle->name_len), 
+             comp_handle + sizeof(char), 
+             sizeof(size_t));
+
+    /* Handler function name */
+    handle->name = malloc(handle->name_len * sizeof(char));
+    memcpy(handle->name, 
+           comp_handle + sizeof(char) + sizeof(size_t), 
+           handle->name_len * sizeof(char));
+    handle->name[handle->name_len] = '\0';
+
+    /* Handle size */
+    memcpy(&(handle->handle_size), 
+             comp_handle + sizeof(char) + sizeof(size_t) +
+             handle->name_len * sizeof(char), 
+             sizeof(int));
+
+    return handle;
 }
