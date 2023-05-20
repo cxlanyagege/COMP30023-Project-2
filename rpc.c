@@ -393,24 +393,28 @@ rpc_data *rpc_data_decompose(int type, char *comp_data, int offset) {
     /* Apply data decompose by different query type */
     if (type == RPC_CALL) {
         rpc_data *data = malloc(sizeof(rpc_data));
+        uint64_t data1, data2_len;
 
         /* data1 in rpc_data */
-        memcpy(&(data->data1), 
-                 comp_data + offset, sizeof(int));
+        memcpy(&(data1), 
+                 comp_data + offset, sizeof(uint64_t));
 
         /* data2_len in rpc_data */
-        memcpy(&(data->data2_len), 
-                 comp_data + offset+ sizeof(int), sizeof(size_t));
+        memcpy(&(data2_len), 
+                 comp_data + offset + sizeof(uint64_t), sizeof(uint64_t));
 
         /* data2 in rpc_data */
-        if (data->data2_len != 0) {
-            data->data2 = malloc(data->data2_len * sizeof(void));
+        if (data2_len != 0) {
+            data->data2 = malloc(data2_len * sizeof(void));
             memcpy(data->data2, 
-                   comp_data + offset+ sizeof(int) + sizeof(size_t), 
-                   data->data2_len);
+                   comp_data + offset + sizeof(uint64_t) + sizeof(uint64_t), 
+                   data2_len);
         } else {
             data->data2 = NULL;
         }
+
+        data->data1 = (int) data1;
+        data->data2_len = (size_t) data2_len;
 
         return data;
     }
