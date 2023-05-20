@@ -1,4 +1,4 @@
-#define _POSIX_C_SOURCE 200112L
+//#define _POSIX_C_SOURCE 200112L
 #define RPC_FIND 1
 #define RPC_CALL 2
 
@@ -28,8 +28,8 @@ struct rpc_handle {
     int handle_size;
 };
 
-char *rpc_data_compose(int type, rpc_data *data, char *extra);
-rpc_data *rpc_data_decompose(char *data);
+char *rpc_data_compose(int type, int *size, rpc_data *data);
+rpc_data *rpc_data_decompose(int type, char *data);
 char *rpc_handle_compose(int type, rpc_handle *handle);
 rpc_handle *rpc_handle_decompose(char *handle);
 
@@ -183,6 +183,29 @@ void rpc_serve_all(rpc_server *srv) {
         /* When client asks to call function */
         else if (recv_buff[0] == RPC_CALL) {
             rpc_handle *handle = rpc_handle_decompose(recv_buff);
+
+            /* Clear handle data in buffer */
+            for (int i = 0; i < 1024; i++) {
+                recv_buff[i] = 0;
+            }
+
+            /* Decomposed buffer into rpc_data */
+            read(conn_fd, recv_buff, sizeof(recv_buff) - 1);
+            rpc_data *data = rpc_data_decompose(RPC_CALL, recv_buff);
+            rpc_data *result;
+
+            /* Call corresponding function */
+            for (int i = 0 ;i < srv->handler_size; i++) {
+                if (strcmp(srv->handler_name[i], handle->name) == 0) {
+                    result = srv->handler[i](data);
+                    break;
+                }
+            }
+
+           /* Send result back to client */
+            int buff_size;
+            char *send_buff = rpc_data_compose(RPC_CALL, &buff_size, result);
+            write(conn_fd, send_buff, buff_size);
         }
 
         /* Clear transfered data once finished */
@@ -308,14 +331,21 @@ rpc_data *rpc_call(rpc_client *cl, rpc_handle *h, rpc_data *payload) {
             close(cl->socket_fd);
     }
 
-    /* Generate composed rpc handle and data */
-    char *call_buff = rpc_handle_compose(RPC_CALL, h);
-    //call_buff = rpc_data_compose(RPC_CALL, payload, call_buff);
+    /* Generate and send composed rpc handle to server */
+    char *handle_buff = rpc_handle_compose(RPC_CALL, h);
+    write(cl->socket_fd, handle_buff, h->handle_size);
 
-    /* Send compose buffer to server */
-    write(cl->socket_fd, call_buff, h->handle_size);
+    /* Generate and send composed rpc data */
+    int buff_size;
+    char *data_buff = rpc_data_compose(RPC_CALL, &buff_size, payload);
+    write(cl->socket_fd, data_buff, buff_size);
 
-    return NULL;
+    /* Receive function calling result */
+    char recv_buff[1024];
+    read(cl->socket_fd, recv_buff, sizeof(recv_buff) - 1);
+    rpc_data *data = rpc_data_decompose(RPC_CALL, recv_buff);
+
+    return data;
 }
 
 void rpc_close_client(rpc_client *cl) {
@@ -332,29 +362,26 @@ void rpc_data_free(rpc_data *data) {
     free(data);
 }
 
-char *rpc_data_compose(int type, rpc_data *data, char *extra) {
+char *rpc_data_compose(int type, int *size, rpc_data *data) {
     /* Apply data compose by different query type */
     if (type == RPC_CALL) {
         /* Record total size of each part */
-        int extra_len = strlen(extra);
-        int size = extra_len + 
-                   sizeof(int) + sizeof(size_t) + data->data2_len;
-        char *comp_data = malloc(size);
+        *size = sizeof(int) + sizeof(size_t) + data->data2_len;
+        char *comp_data = malloc(*size);
 
-        /* extra (handle) in rpc_handle */
-        memcpy(comp_data, extra, extra_len);
-        
         /* data1 in rpc_data */
-        memcpy(comp_data + extra_len, 
+        memcpy(comp_data, 
              &(data->data1), sizeof(int));
 
         /* data2_len in rpc_data */
-        memcpy(comp_data + extra_len + sizeof(int), 
+        memcpy(comp_data + sizeof(int), 
              &(data->data2_len), sizeof(size_t));
 
         /* data2 in rpc_data */
-        memcpy(comp_data + extra_len + sizeof(int) + sizeof(size_t), 
-               data->data2, data->data2_len);
+        if (data->data2_len != 0) {
+            memcpy(comp_data + sizeof(int) + sizeof(size_t), 
+                   data->data2, data->data2_len);
+        }
 
         return comp_data;
     }
@@ -363,10 +390,30 @@ char *rpc_data_compose(int type, rpc_data *data, char *extra) {
     return NULL;
 }
 
-rpc_data *rpc_data_decompose(char *data) {
-    /* Apply data decompose by first index of data */
-    if (data[0] == RPC_CALL) {
+rpc_data *rpc_data_decompose(int type, char *comp_data) {
+    /* Apply data decompose by different query type */
+    if (type == RPC_CALL) {
         rpc_data *data = malloc(sizeof(rpc_data));
+
+        /* data1 in rpc_data */
+        memcpy(&(data->data1), 
+                 comp_data, sizeof(int));
+
+        /* data2_len in rpc_data */
+        memcpy(&(data->data2_len), 
+                 comp_data + sizeof(int), sizeof(size_t));
+
+        /* data2 in rpc_data */
+        if (data->data2_len != 0) {
+            data->data2 = malloc(data->data2_len * sizeof(void));
+            memcpy(data->data2, 
+                   comp_data + sizeof(int) + sizeof(size_t), 
+                   data->data2_len);
+        } else {
+            data->data2 = NULL;
+        }
+
+        return data;
     }
 
     /* Unsupported call type, decomposed failed */
