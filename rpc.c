@@ -302,7 +302,8 @@ rpc_handle *rpc_find(rpc_client *cl, char *name) {
     /* Return handle for further reference */
     rpc_handle *handle = malloc(sizeof(rpc_handle));
     handle->name_len = strlen(name);
-    handle->name = name;
+    handle->name = malloc(handle->name_len);
+    memcpy(handle->name, name, handle->name_len);
     
     return handle;
 }
