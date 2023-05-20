@@ -1,4 +1,5 @@
 //#define _POSIX_C_SOURCE 200112L
+#define RPC_ERROR 0
 #define RPC_FIND 1
 #define RPC_CALL 2
 
@@ -197,10 +198,27 @@ void rpc_serve_all(rpc_server *srv) {
                 }
             }
 
-           /* Send result back to client */
+            /* Send result back to client */
             int buff_size;
-            char *send_buff = rpc_data_compose(RPC_CALL, &buff_size, result);
-            write(conn_fd, send_buff, buff_size);
+
+            if (result == NULL) {
+                char send_buff[1024];
+                send_buff[0] = RPC_ERROR;
+                write(conn_fd, send_buff, 1);
+            } else {
+                if ((result->data2_len != 0 && result->data2 == NULL) || 
+                    (result->data2_len == 0 && result->data2 != NULL)) {
+                    char send_buff[1024];
+                    send_buff[0] = RPC_ERROR;
+                    write(conn_fd, send_buff, 1);
+                } else {
+                    char *data_buff = rpc_data_compose(RPC_CALL, &buff_size, result);
+                    char *send_buff = malloc(buff_size + 1);
+                    send_buff[0] = RPC_CALL;
+                    memcpy(send_buff + 1, data_buff, buff_size);
+                    write(conn_fd, send_buff, buff_size + 1);
+                }
+            }
         }
 
         /* Clear transfered data once finished */
@@ -340,7 +358,10 @@ rpc_data *rpc_call(rpc_client *cl, rpc_handle *h, rpc_data *payload) {
     /* Receive function calling result */
     char recv_buff[1024];
     read(cl->socket_fd, recv_buff, sizeof(recv_buff) - 1);
-    rpc_data *data = rpc_data_decompose(RPC_CALL, recv_buff, 0);
+    if (recv_buff[0] == RPC_ERROR) {
+        return NULL;
+    }
+    rpc_data *data = rpc_data_decompose(RPC_CALL, recv_buff + 1, 0);
 
     return data;
 }
@@ -360,6 +381,11 @@ void rpc_data_free(rpc_data *data) {
 }
 
 char *rpc_data_compose(int type, int *size, rpc_data *data) {
+    /* Check if rpc data is valid */
+    if (data == NULL) {
+        return NULL;
+    }
+
     /* Apply data compose by different query type */
     if (type == RPC_CALL) {
         /* Record total size of each part */
