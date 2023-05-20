@@ -5,9 +5,11 @@
 #include <netdb.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <errno.h>
+#include <arpa/inet.h>
 #include "rpc.h"
 
 struct rpc_server {
@@ -32,6 +34,8 @@ char *rpc_data_compose(int type, int *size, rpc_data *data);
 rpc_data *rpc_data_decompose(int type, char *data, int offset);
 char *rpc_handle_compose(int type, rpc_handle *handle);
 rpc_handle *rpc_handle_decompose(char *handle);
+uint64_t rpc_htonl(uint64_t value);
+uint64_t rpc_ntohl(uint64_t value);
 
 rpc_server *rpc_init_server(int port) {
     /* Allocate memory to server */
@@ -341,7 +345,7 @@ rpc_data *rpc_call(rpc_client *cl, rpc_handle *h, rpc_data *payload) {
 }
 
 void rpc_close_client(rpc_client *cl) {
-
+    close(cl->socket_fd);
 }
 
 void rpc_data_free(rpc_data *data) {
@@ -368,19 +372,21 @@ char *rpc_data_compose(int type, int *size, rpc_data *data) {
         *size = sizeof(uint64_t) + sizeof(uint64_t) + data2_len;
         char *comp_data = malloc(*size);
 
-        /* data1 in rpc_data */
-        memcpy(comp_data, 
-             &(data1), sizeof(uint64_t));
-
-        /* data2_len in rpc_data */
-        memcpy(comp_data + sizeof(uint64_t), 
-             &(data2_len), sizeof(uint64_t));
-
         /* data2 in rpc_data */
         if (data->data2_len != 0) {
             memcpy(comp_data + sizeof(uint64_t) + sizeof(uint64_t), 
                    data->data2, data2_len);
         }
+
+        /* data1 in rpc_data */
+        data1 = rpc_htonl(data1);
+        memcpy(comp_data, 
+             &(data1), sizeof(uint64_t));
+
+        /* data2_len in rpc_data */
+        data2_len = rpc_htonl(data2_len);
+        memcpy(comp_data + sizeof(uint64_t), 
+             &(data2_len), sizeof(uint64_t));
 
         return comp_data;
     }
@@ -398,10 +404,12 @@ rpc_data *rpc_data_decompose(int type, char *comp_data, int offset) {
         /* data1 in rpc_data */
         memcpy(&(data1), 
                  comp_data + offset, sizeof(uint64_t));
+        data1 = rpc_ntohl(data1);
 
         /* data2_len in rpc_data */
         memcpy(&(data2_len), 
                  comp_data + offset + sizeof(uint64_t), sizeof(uint64_t));
+        data2_len = rpc_ntohl(data2_len);
 
         /* data2 in rpc_data */
         if (data2_len != 0) {
@@ -415,6 +423,7 @@ rpc_data *rpc_data_decompose(int type, char *comp_data, int offset) {
         }
 
         data->data1 = (int) data1;
+        data->data2_len = (size_t) data2_len;
 
         return data;
     }
@@ -482,4 +491,20 @@ rpc_handle *rpc_handle_decompose(char *comp_handle) {
              sizeof(int));
 
     return handle;
+}
+
+uint64_t rpc_htonl(uint64_t value) {
+    /* Make byte order into Big Endian */
+    uint32_t high_part = htonl((uint32_t)(value >> 32));
+    uint32_t low_part = htonl((uint32_t)(value & 0xFFFFFFFFLL));
+
+    return ((uint64_t)high_part << 32) | low_part;
+}
+
+uint64_t rpc_ntohl(uint64_t value) {
+    /* Make byte order into Little Endian */
+    uint32_t high_part = ntohl((uint32_t)(value >> 32));
+    uint32_t low_part = ntohl((uint32_t)(value & 0xFFFFFFFFLL));
+    
+    return ((uint64_t)high_part << 32) | low_part;
 }

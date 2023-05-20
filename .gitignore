@@ -4,3 +4,5 @@ client.a
 rpc.o
 rpc-server
 rpc-client
+server_log.txt
+client_log.txt
