@@ -1,4 +1,3 @@
-//#define _POSIX_C_SOURCE 200112L
 #define RPC_ERROR 0
 #define RPC_FIND 1
 #define RPC_CALL 2
@@ -116,15 +115,14 @@ void rpc_serve_all(rpc_server *srv) {
                 printf("Bind failed: %s\n", strerror(errno));
     }
     listen(srv->socket_fd, 10);
+    struct sockaddr_storage client_addr;
+    socklen_t client_addr_size = sizeof(client_addr);
+    int conn_fd = accept(srv->socket_fd, 
+                        (struct sockaddr*)&client_addr, 
+                        &client_addr_size);
 
     /* Wait until query coming in */
     while (1) {
-        struct sockaddr_storage client_addr;
-        socklen_t client_addr_size = sizeof(client_addr);
-        int conn_fd = accept(srv->socket_fd, 
-                            (struct sockaddr*)&client_addr, 
-                            &client_addr_size);
-
         /* Error query, continue waiting */
         if (conn_fd < 0) {
             continue;
@@ -160,24 +158,22 @@ void rpc_serve_all(rpc_server *srv) {
                     }
                 }
 
-                /* No matched handler function */
+                /* Matched result, reform client */
                 if (j == byte_len) {
                     char send_buff[1024];
                     send_buff[0] = RPC_FIND;
                     send_buff[1] = 1;
                     write(conn_fd, send_buff, strlen(send_buff)); 
-                    close(conn_fd);
                     break;
                 }
             }
 
-            /* Matched result, reform client */
+            /* No matched handler function */
             if (i == srv->handler_size) {
                 char send_buff[1024];
                 send_buff[0] = RPC_FIND;
                 send_buff[1] = 0;
                 write(conn_fd, send_buff, strlen(send_buff)); 
-                close(conn_fd);
             }
         } 
         
@@ -260,6 +256,25 @@ rpc_client *rpc_init_client(char *addr, int port) {
     sprintf(port_buffer, "%d", port);
     getaddrinfo(addr, port_buffer, &client->hint, &client->res);
 
+    /* Create socket for client connection */
+    for (client->rp = client->res; 
+         client->rp != NULL; 
+         client->rp = client->rp->ai_next) {
+            client->socket_fd = socket(client->rp->ai_family, 
+                                   client->rp->ai_socktype, 
+                                   client->rp->ai_protocol);
+            if (client->socket_fd == -1) {
+                continue;
+            }
+            if (connect(client->socket_fd, 
+                        client->rp->ai_addr, 
+                        client->rp->ai_addrlen) != -1) {
+                            break;
+            }
+            printf("yoyo\n");
+            close(client->socket_fd);
+    }
+
     return client;
 }
 
@@ -267,24 +282,6 @@ rpc_handle *rpc_find(rpc_client *cl, char *name) {
     /* Check if arguments are valid */
     if (cl == NULL || name == NULL) {
         return NULL;
-    }
-
-    /* Create socket for client connection */
-    for (cl->rp = cl->res; 
-         cl->rp != NULL; 
-         cl->rp = cl->rp->ai_next) {
-            cl->socket_fd = socket(cl->rp->ai_family, 
-                                   cl->rp->ai_socktype, 
-                                   cl->rp->ai_protocol);
-            if (cl->socket_fd == -1) {
-                continue;
-            }
-            if (connect(cl->socket_fd, 
-                        cl->rp->ai_addr, 
-                        cl->rp->ai_addrlen) != -1) {
-                            break;
-            }
-            close(cl->socket_fd);
     }
 
     /* Send compose name data to server */
@@ -296,10 +293,7 @@ rpc_handle *rpc_find(rpc_client *cl, char *name) {
 
     /* Read result sending from server */
     char recv_buff[1024];
-    while (read(cl->socket_fd, recv_buff, 
-                sizeof(recv_buff) - 1) > 0) {
-
-    }
+    read(cl->socket_fd, recv_buff, sizeof(recv_buff) - 1);
 
     /* Check if result is valid */
     if (recv_buff[0] == 0) {
@@ -309,8 +303,6 @@ rpc_handle *rpc_find(rpc_client *cl, char *name) {
             return NULL;
         }
     }
-
-    close(cl->socket_fd);
 
     /* Return handle for further reference */
     rpc_handle *handle = malloc(sizeof(rpc_handle));
@@ -326,24 +318,6 @@ rpc_data *rpc_call(rpc_client *cl, rpc_handle *h, rpc_data *payload) {
     if (cl == NULL || h == NULL || payload == NULL || 
         payload->data2_len == 0 || payload->data2 == NULL) {
         return NULL;
-    }
-
-    /* Create socket for client connection */
-    for (cl->rp = cl->res; 
-         cl->rp != NULL; 
-         cl->rp = cl->rp->ai_next) {
-            cl->socket_fd = socket(cl->rp->ai_family, 
-                                   cl->rp->ai_socktype, 
-                                   cl->rp->ai_protocol);
-            if (cl->socket_fd == -1) {
-                continue;
-            }
-            if (connect(cl->socket_fd, 
-                        cl->rp->ai_addr, 
-                        cl->rp->ai_addrlen) != -1) {
-                            break;
-            }
-            close(cl->socket_fd);
     }
 
     /* Generate and send composed rpc handle and data */
