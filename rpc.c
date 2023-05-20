@@ -363,10 +363,10 @@ char *rpc_data_compose(int type, int *size, rpc_data *data) {
     /* Apply data compose by different query type */
     if (type == RPC_CALL) {
         /* Record total size of each part */
-        *size = sizeof(int) + sizeof(size_t) + data->data2_len;
-        char *comp_data = malloc(*size);
         uint64_t data1 = (uint64_t) data->data1;
         uint64_t data2_len = (uint64_t) data->data2_len;
+        *size = sizeof(uint64_t) + sizeof(uint64_t) + data2_len;
+        char *comp_data = malloc(*size);
 
         /* data1 in rpc_data */
         memcpy(comp_data, 
@@ -405,7 +405,8 @@ rpc_data *rpc_data_decompose(int type, char *comp_data, int offset) {
 
         /* data2 in rpc_data */
         if (data2_len != 0) {
-            data->data2 = malloc(data2_len * sizeof(void));
+            data->data2_len = (size_t) data2_len;
+            data->data2 = malloc(data->data2_len * sizeof(void));
             memcpy(data->data2, 
                    comp_data + offset + sizeof(uint64_t) + sizeof(uint64_t), 
                    data2_len);
@@ -414,7 +415,6 @@ rpc_data *rpc_data_decompose(int type, char *comp_data, int offset) {
         }
 
         data->data1 = (int) data1;
-        data->data2_len = (size_t) data2_len;
 
         return data;
     }
