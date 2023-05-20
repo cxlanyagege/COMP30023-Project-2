@@ -495,16 +495,16 @@ rpc_handle *rpc_handle_decompose(char *comp_handle) {
 
 uint64_t rpc_htonl(uint64_t value) {
     /* Make byte order into Big Endian */
-    uint32_t high_part = htonl((uint32_t)(value >> 32));
-    uint32_t low_part = htonl((uint32_t)(value & 0xFFFFFFFFLL));
+    uint64_t high_part = htonl((uint32_t)(value >> 32));
+    uint64_t low_part = htonl((uint32_t)(value & 0xFFFFFFFFLL));
 
-    return ((uint64_t)high_part << 32) | low_part;
+    return (low_part << 32) | high_part;
 }
 
 uint64_t rpc_ntohl(uint64_t value) {
     /* Make byte order into Little Endian */
-    uint32_t high_part = ntohl((uint32_t)(value >> 32));
-    uint32_t low_part = ntohl((uint32_t)(value & 0xFFFFFFFFLL));
-    
-    return ((uint64_t)high_part << 32) | low_part;
+    uint64_t high_part = ntohl((uint32_t)(value >> 32));
+    uint64_t low_part = ntohl((uint32_t)(value & 0xFFFFFFFFLL));
+
+    return (low_part << 32) | high_part;
 }
