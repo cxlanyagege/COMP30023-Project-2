@@ -365,19 +365,21 @@ char *rpc_data_compose(int type, int *size, rpc_data *data) {
         /* Record total size of each part */
         *size = sizeof(int) + sizeof(size_t) + data->data2_len;
         char *comp_data = malloc(*size);
+        uint64_t data1 = (uint64_t) data->data1;
+        uint64_t data2_len = (uint64_t) data->data2_len;
 
         /* data1 in rpc_data */
         memcpy(comp_data, 
-             &(data->data1), sizeof(int));
+             &(data1), sizeof(uint64_t));
 
         /* data2_len in rpc_data */
-        memcpy(comp_data + sizeof(int), 
-             &(data->data2_len), sizeof(size_t));
+        memcpy(comp_data + sizeof(uint64_t), 
+             &(data2_len), sizeof(uint64_t));
 
         /* data2 in rpc_data */
         if (data->data2_len != 0) {
-            memcpy(comp_data + sizeof(int) + sizeof(size_t), 
-                   data->data2, data->data2_len);
+            memcpy(comp_data + sizeof(uint64_t) + sizeof(uint64_t), 
+                   data->data2, data2_len);
         }
 
         return comp_data;
