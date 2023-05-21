@@ -348,8 +348,9 @@ rpc_handle *rpc_find(rpc_client *cl, char *name) {
 rpc_data *rpc_call(rpc_client *cl, rpc_handle *h, rpc_data *payload) {
     /* Check if arguments are valid */
     if (cl == NULL || h == NULL || payload == NULL || 
-        payload->data2_len == 0 || payload->data2 == NULL) {
-        return NULL;
+       (payload->data2_len == 0 && payload->data2 != NULL) ||
+       (payload->data2_len != 0 && payload->data2 == NULL)) {
+            return NULL;
     }
 
     /* Generate and send composed rpc handle and data */
