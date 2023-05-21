@@ -1,3 +1,4 @@
+#define NONBLOCKING
 #define RPC_ERROR 0
 #define RPC_FIND 1
 #define RPC_CALL 2
@@ -9,12 +10,14 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <errno.h>
+#include <pthread.h>
 #include <arpa/inet.h>
 #include "rpc.h"
 
 struct rpc_server {
     /* Add variable(s) for server state */
     int port;                           // Server port
+    int conn_fd;                        // Server connfd
     int socket_fd;                      // Server socket
     int socket_opt;                     // Socket option
     int handler_size;                   // Handler numbers
@@ -30,6 +33,7 @@ struct rpc_handle {
     int handle_size;
 };
 
+void *rpc_connect(void *arg);
 char *rpc_data_compose(int type, int *size, rpc_data *data);
 rpc_data *rpc_data_decompose(int type, char *data, int offset);
 char *rpc_handle_compose(int type, rpc_handle *handle);
@@ -121,18 +125,39 @@ void rpc_serve_all(rpc_server *srv) {
     listen(srv->socket_fd, 10);
     struct sockaddr_storage client_addr;
     socklen_t client_addr_size = sizeof(client_addr);
-    int conn_fd = accept(srv->socket_fd, 
-                        (struct sockaddr*)&client_addr, 
-                        &client_addr_size);
 
     /* Wait until query coming in */
     while (1) {
+        /* Try to accept client address */
+        int conn_fd = accept(srv->socket_fd, 
+                            (struct sockaddr*)&client_addr, 
+                            &client_addr_size);
+
         /* Error query, continue waiting */
         if (conn_fd < 0) {
+            perror("Accept status");
             continue;
         }
 
-        /* Read request from client */
+        /* Create standalon server for new thread */
+        rpc_server *srv_thread = malloc(sizeof(rpc_server));
+        memcpy(srv_thread, srv, sizeof(rpc_server));
+        srv_thread->conn_fd = conn_fd;
+
+        /* Create new thread */
+        pthread_t thread;
+        pthread_create(&thread, NULL, rpc_connect, srv_thread);
+        pthread_detach(thread);
+    }
+}
+
+void *rpc_connect(void *arg) {
+    rpc_server *srv = (rpc_server *) arg;
+    int conn_fd = srv->conn_fd;
+
+    /* Continue perform reading from client */
+    while (1) {
+    /* Read request from client */
         char recv_buff[1024];
         int byte_len = read(conn_fd, 
                             recv_buff, 
@@ -140,8 +165,9 @@ void rpc_serve_all(rpc_server *srv) {
 
         /* Check if reading is completed */
         if (byte_len < 0) {
+            perror("Read status");
             close(conn_fd);
-            continue;
+            break;
         }
 
         /* Determine specific RPC call feature */
@@ -226,6 +252,8 @@ void rpc_serve_all(rpc_server *srv) {
             recv_buff[i] = 0;
         }
     }
+
+    return NULL;
 }
 
 struct rpc_client {
@@ -495,16 +523,16 @@ rpc_handle *rpc_handle_decompose(char *comp_handle) {
 
 uint64_t rpc_htonl(uint64_t value) {
     /* Make byte order into Big Endian */
-    uint64_t high_part = htonl((uint32_t)(value >> 32));
-    uint64_t low_part = htonl((uint32_t)(value & 0xFFFFFFFFLL));
+    uint64_t high_part = htonl((uint32_t) (value >> 32));
+    uint64_t low_part = htonl((uint32_t) (value & 0xFFFFFFFFLL));
 
     return (low_part << 32) | high_part;
 }
 
 uint64_t rpc_ntohl(uint64_t value) {
     /* Make byte order into Little Endian */
-    uint64_t high_part = ntohl((uint32_t)(value >> 32));
-    uint64_t low_part = ntohl((uint32_t)(value & 0xFFFFFFFFLL));
+    uint64_t high_part = ntohl((uint32_t) (value >> 32));
+    uint64_t low_part = ntohl((uint32_t) (value & 0xFFFFFFFFLL));
 
     return (low_part << 32) | high_part;
 }
