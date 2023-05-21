@@ -5,12 +5,12 @@
 #define RPC_CALL_R 3
 
 #include <netdb.h>
-#include <string.h>
-#include <stdio.h>
-#include <stdint.h>
-#include <stdlib.h>
-#include <unistd.h>
 #include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <string.h>
+#include <unistd.h>
 #include <pthread.h>
 #include <arpa/inet.h>
 #include "rpc.h"
@@ -29,17 +29,30 @@ struct rpc_server {
 
 struct rpc_handle {
     /* Add variable(s) for handle */
-    size_t name_len;
-    char *name;
-    int handle_size;
+    char *name;                         // Handle name
+    int handle_size;                    // Handle char size
+    size_t name_len;                    // Handle name length
 };
 
+/* Do connection in a new thread */
 void *rpc_connect(void *arg);
+
+/* Compose rpc data into single string */
 char *rpc_data_compose(int type, int *size, rpc_data *data);
+
+/* Decompose rpc data back to structure */
 rpc_data *rpc_data_decompose(int type, char *data, int offset);
+
+/* Compose rpc handle into single string */
 char *rpc_handle_compose(int type, rpc_handle *handle);
+
+/* Decompose rpc handle back to structure */
 rpc_handle *rpc_handle_decompose(char *handle);
+
+/* Translate value into Big-Endian Byte Order */
 uint64_t rpc_htonl(uint64_t value);
+
+/* Translate value into Little-Endian Byte Order */
 uint64_t rpc_ntohl(uint64_t value);
 
 rpc_server *rpc_init_server(int port) {
@@ -233,7 +246,6 @@ void *rpc_connect(void *arg) {
 
             /* Send result back to client */
             int buff_size;
-
             if (result == NULL) {
                 char send_buff[1024];
                 send_buff[0] = RPC_ERROR;
@@ -269,9 +281,6 @@ struct rpc_client {
     /* Add variable(s) for client state */
     int port;                           // Server port
     int socket_fd;                      // Server socket
-    int handler_size;                   // Handler numbers
-    char **handler_name;                // Handler names array
-    rpc_handler *handler;               // Handler function array
     struct addrinfo hint, *res, *rp;    // Address storing infomation
 };
 
@@ -415,6 +424,7 @@ void rpc_data_free(rpc_data *data) {
     if (data->data2 != NULL) {
         free(data->data2);
     }
+
     free(data);
 }
 
@@ -484,6 +494,7 @@ rpc_data *rpc_data_decompose(int type, char *comp_data, int offset) {
             data->data2 = NULL;
         }
 
+        /* Change data type back to origin */
         data->data1 = (int) data1;
         data->data2_len = (size_t) data2_len;
 
@@ -556,17 +567,19 @@ rpc_handle *rpc_handle_decompose(char *comp_handle) {
 }
 
 uint64_t rpc_htonl(uint64_t value) {
-    /* Make byte order into Big Endian */
+    /* Intercept Big-Endian high and low parts */
     uint64_t high_part = htonl((uint32_t) (value >> 32));
     uint64_t low_part = htonl((uint32_t) (value & 0xFFFFFFFFLL));
 
+    /* Switch high and low parts position */
     return (low_part << 32) | high_part;
 }
 
 uint64_t rpc_ntohl(uint64_t value) {
-    /* Make byte order into Little Endian */
+    /* Intercept Little-Endian high and low parts */
     uint64_t high_part = ntohl((uint32_t) (value >> 32));
     uint64_t low_part = ntohl((uint32_t) (value & 0xFFFFFFFFLL));
 
+    /* Switch high and low parts position */
     return (low_part << 32) | high_part;
 }
