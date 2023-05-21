@@ -134,7 +134,7 @@ void rpc_serve_all(rpc_server *srv) {
     if (bind(srv->socket_fd, 
              srv->res->ai_addr, 
              srv->res->ai_addrlen)) {
-                printf("Bind failed: %s\n", strerror(errno));
+                perror("Bind");
     }
     listen(srv->socket_fd, 10);
     struct sockaddr_storage client_addr;
@@ -321,7 +321,6 @@ rpc_client *rpc_init_client(char *addr, int port) {
                         client->rp->ai_addrlen) != -1) {
                             break;
             }
-            printf("yoyo\n");
             close(client->socket_fd);
     }
 
