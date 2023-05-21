@@ -193,7 +193,7 @@ void *rpc_connect(void *arg) {
                     char send_buff[1024];
                     send_buff[0] = RPC_FIND;
                     send_buff[1] = 1;
-                    write(conn_fd, send_buff, strlen(send_buff)); 
+                    write(conn_fd, send_buff, 2); 
                     break;
                 }
             }
@@ -203,7 +203,7 @@ void *rpc_connect(void *arg) {
                 char send_buff[1024];
                 send_buff[0] = RPC_FIND;
                 send_buff[1] = 0;
-                write(conn_fd, send_buff, strlen(send_buff)); 
+                write(conn_fd, send_buff, 2); 
             }
         } 
         
@@ -213,7 +213,8 @@ void *rpc_connect(void *arg) {
             rpc_handle *handle = rpc_handle_decompose(recv_buff);
 
             /* Decomposed buffer into rpc_data */
-            rpc_data *data = rpc_data_decompose(RPC_CALL, recv_buff, handle->handle_size);
+            rpc_data *data = rpc_data_decompose(RPC_CALL, recv_buff, 
+                                                handle->handle_size);
             rpc_data *result;
 
             /* Call corresponding function */
@@ -238,7 +239,9 @@ void *rpc_connect(void *arg) {
                     send_buff[0] = RPC_ERROR;
                     write(conn_fd, send_buff, 1);
                 } else {
-                    char *data_buff = rpc_data_compose(RPC_CALL, &buff_size, result);
+                    char *data_buff = rpc_data_compose(RPC_CALL, 
+                                                      &buff_size, 
+                                                       result);
                     char *send_buff = malloc(buff_size + 1);
                     send_buff[0] = RPC_CALL;
                     memcpy(send_buff + 1, data_buff, buff_size);
@@ -356,7 +359,8 @@ rpc_data *rpc_call(rpc_client *cl, rpc_handle *h, rpc_data *payload) {
     /* Generate and send composed rpc handle and data */
     int data_buff_size;
     char *handle_buff = rpc_handle_compose(RPC_CALL, h);
-    char *data_buff = rpc_data_compose(RPC_CALL, &data_buff_size, payload);
+    char *data_buff = rpc_data_compose(RPC_CALL, &data_buff_size, 
+                                       payload);
     char *send_buff = malloc(h->handle_size + data_buff_size);
     memcpy(send_buff, handle_buff, h->handle_size);
     memcpy(send_buff + h->handle_size, data_buff, data_buff_size);
@@ -374,13 +378,22 @@ rpc_data *rpc_call(rpc_client *cl, rpc_handle *h, rpc_data *payload) {
 }
 
 void rpc_close_client(rpc_client *cl) {
+    /* Check if client is valid */
+    if (cl == NULL) {
+        return;
+    }
+
+    /* Close socket used by client */
     close(cl->socket_fd);
 }
 
 void rpc_data_free(rpc_data *data) {
+    /* Check if rpc data is valid */
     if (data == NULL) {
         return;
     }
+
+    /* Free rpcd data and data inside */
     if (data->data2 != NULL) {
         free(data->data2);
     }
@@ -437,7 +450,8 @@ rpc_data *rpc_data_decompose(int type, char *comp_data, int offset) {
 
         /* data2_len in rpc_data */
         memcpy(&(data2_len), 
-                 comp_data + offset + sizeof(uint64_t), sizeof(uint64_t));
+                 comp_data + offset + sizeof(uint64_t), 
+                                      sizeof(uint64_t));
         data2_len = rpc_ntohl(data2_len);
 
         /* data2 in rpc_data */
@@ -445,8 +459,9 @@ rpc_data *rpc_data_decompose(int type, char *comp_data, int offset) {
             data->data2_len = (size_t) data2_len;
             data->data2 = malloc(data->data2_len * sizeof(void));
             memcpy(data->data2, 
-                   comp_data + offset + sizeof(uint64_t) + sizeof(uint64_t), 
-                   data2_len);
+                   comp_data + offset + sizeof(uint64_t) + 
+                                        sizeof(uint64_t), 
+                                        data2_len);
         } else {
             data->data2 = NULL;
         }
@@ -507,7 +522,7 @@ rpc_handle *rpc_handle_decompose(char *comp_handle) {
              sizeof(size_t));
 
     /* Handler function name */
-    handle->name = malloc(handle->name_len * sizeof(char));
+    handle->name = malloc(handle->name_len * sizeof(char) + 1);
     memcpy(handle->name, 
            comp_handle + sizeof(char) + sizeof(size_t), 
            handle->name_len * sizeof(char));
