@@ -226,6 +226,11 @@ void *rpc_connect(void *arg) {
                 }
             }
 
+            /* Free rpc handle and data */
+            free(handle);
+            free(data->data2);
+            free(data);
+
             /* Send result back to client */
             int buff_size;
 
@@ -345,6 +350,9 @@ rpc_handle *rpc_find(rpc_client *cl, char *name) {
     handle->name_len = strlen(name);
     handle->name = malloc(handle->name_len);
     memcpy(handle->name, name, handle->name_len);
+
+    /* Free composition name */
+    free(comp_name);
     
     return handle;
 }
@@ -375,6 +383,11 @@ rpc_data *rpc_call(rpc_client *cl, rpc_handle *h, rpc_data *payload) {
     }
     rpc_data *data = rpc_data_decompose(RPC_CALL, recv_buff + 1, 0);
 
+    /* Free buffer */
+    free(handle_buff);
+    free(data_buff);
+    free(send_buff);
+
     return data;
 }
 
@@ -386,6 +399,10 @@ void rpc_close_client(rpc_client *cl) {
 
     /* Close socket used by client */
     close(cl->socket_fd);
+
+    /* Free client pointer */
+    free(cl->res);
+    free(cl);
 }
 
 void rpc_data_free(rpc_data *data) {
