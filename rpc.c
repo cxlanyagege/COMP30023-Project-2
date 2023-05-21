@@ -2,6 +2,7 @@
 #define RPC_ERROR 0
 #define RPC_FIND 1
 #define RPC_CALL 2
+#define RPC_CALL_R 3
 
 #include <netdb.h>
 #include <string.h>

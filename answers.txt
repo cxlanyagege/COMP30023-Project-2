@@ -2,6 +2,7 @@ Name: He Shen
 Login ID: heshen
 Student ID: 1297447
 
+
 3.2 Planning task
 
 1. For the scenario of this project service only, I believe that the server can 
@@ -16,4 +17,75 @@ Student ID: 1297447
    scenarios (such as secondary validation), and these individual validation 
    methods need to be placed in their functions.
 
-3. 
+3. TCP provides reliable data transfering, but is relatively slow. While UDP is
+   relatively faster, it may cause data loss. In this project, RPC server only
+   involves a tiny data, it might be better to use TCP since its process time
+   costs will be relatively small, and it is better improving data integrity. 
+   In real world, it depends on different scenario where the use case is more
+   focused on speed or reliability.
+
+4. The sockets are being created in RPC Server and RPC Client initialization
+   functions in my project, and I think it is much clearer where the program
+   only need to handle one step to create the basic net related components, 
+   and there is no need to initialize each different subsystem seperately in
+   future. In real world, it might depend on when different request happens
+   between servers and clients, then try to create socket to use resource more
+   efficiently, and avoid some vunerables.
+
+5.  In this project, their use cases are very limited, hence allocating them
+    statically will be an acceptable choice. In real world, new demands may 
+    increase over time, so dynamically allocation will be a better choice, 
+    which provides more flexibility.
+
+6. If different hosts use different endian byte, it needs a translation while 
+   reading or writing, so that data can be read in correct order. Network Byte
+   Order usually represents Big-Endian Byte Order, it is a standard byte order 
+   when data are being transmitted over the network.
+
+
+3.3 Protocol
+
+1. Read / Write
+
+   Indicator: It takes only a simple one charactor at the beginning, it tells 
+              the other side what operation I am requesting. For example, if 
+              the client needs to perform a function name search on server, it 
+              will send "RPC_FIND" indicator at the beginning of one message.
+
+   Handle: The handle is a data structure, it can represent function name, and 
+           its name's length. The handle usually uses directly after indicator, 
+           tells server that I need to perform calling using this function by 
+           scanning function name in handle. Name's length is used in decompose
+           the handle back to a complete handle structure.
+
+   RPC Data: RPC Data is a data structure which stores core data that needs to
+             be performed both in server or client. When a client wants to send
+             it, it usually goes after handle and indicator. When a server send
+             back to client, it may directly goes after indicator since client
+             already knows what data specifically it will receive. 
+
+2. Error Handling
+
+   When there is an error occure in requesting, the indicator will be force to
+   set to RPC_ERROR, indicating there is an error in result, or in the process
+   when rendering result. Detailed error information can be send right after 
+   error indicator, it is optional.
+
+3. Data Transmiting
+
+   All data will be packaged into Big-Endian Byte Order (Network Byte Order) 
+   before sending, hence to ensure data are being transfered in standard. For
+   architecture-dependent variables, they will also be processed before and 
+   after sending and receiving, to make sure the value's integrity.
+
+4. Transport Layer Protocol
+   
+   TCP will be used through the whole transportation, while it greatly protects
+   data integrity, it might be slower compared to UDP. However, from the form
+   of this RPC's situation, time is cost-effective since it is used for small
+   subset of data.
+
+5. Package size
+   If there is a package that exceeds the maximum size, the server or client 
+   can send continuous message with indicator RPC_CALL_R which represents 
+   resuming data compisition.
